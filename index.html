@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tracking Viewer — исследование движения</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="vendor/three.min.js"></script>
+  <script defer src="parser.js"></script>
+  <script defer src="scene.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+<main>
+  <header class="header">
+    <div><div class="eyebrow">XR MOTION LAB / ИТЕРАЦИЯ 01</div><h1>Tracking Viewer<span class="title-dot">.</span></h1>
+      <p>От записи — к движению. Видео, пространство и точные значения на одной шкале.</p></div>
+    <span class="local-badge">● Локально · без загрузки в сеть</span>
+  </header>
+
+  <section class="imports" aria-label="Исходные файлы">
+    <label class="file-card"><span class="step">01</span><span class="file-copy"><strong>Данные трекинга</strong>
+      <span id="tracking-name">Выберите TXT / JSONL</span><input id="tracking-file" type="file" accept=".txt,.jsonl,.ndjson,.json"></span></label>
+    <label class="file-card"><span class="step">02</span><span class="file-copy"><strong>Видео записи <small>необязательно</small></strong>
+      <span id="video-name">Выберите MP4 / WebM</span><input id="video-file" type="file" accept="video/*"></span></label>
+  </section>
+  <div id="load-box" hidden><progress id="progress" max="1" value="0"></progress><span id="load-text"></span><button id="cancel-load">Отмена</button></div>
+  <p id="message" role="status" aria-live="polite">Выберите трекинг. Просмотрщик работает и без видео.</p>
+  <p id="error" role="alert" hidden></p>
+  <section class="metrics" aria-label="Информация о записи">
+    <div><span>Длительность трекинга</span><strong id="duration-stat">—</strong></div>
+    <div><span>Кадры / средняя частота</span><strong id="frames-stat">—</strong></div>
+    <div><span>Левая кисть · активные кадры</span><strong id="left-stat">—</strong></div>
+    <div><span>Правая кисть · активные кадры</span><strong id="right-stat">—</strong></div>
+  </section>
+
+  <section class="views">
+    <article class="panel">
+      <div class="panel-head"><h2>Видео</h2><span id="video-info">Источник не выбран</span></div>
+      <div class="video-stage"><video id="video" playsinline muted preload="metadata"></video>
+        <div id="video-empty" class="empty"><span class="empty-icon">▷</span><strong>Взгляд из гарнитуры</strong><span>Добавьте видео этой записи</span></div>
+        <div id="video-outside" class="video-notice" hidden>Этот момент вне диапазона видео</div>
+      </div>
+      <div class="panel-foot"><label>Сдвиг видео, с <input id="offset" type="number" step="0.001" value="0" disabled></label>
+        <button id="auto-offset" disabled>По метке записи</button><span id="video-state">Видео необязательно</span></div>
+    </article>
+    <article class="panel">
+      <div class="panel-head"><h2>Пространство</h2><div class="legend"><span class="head-key">Голова</span><span class="left-key">Левая</span><span class="right-key">Правая</span></div></div>
+      <div id="scene" role="img" aria-label="Трёхмерное положение головы и суставов кистей. Потяните мышью для вращения, колесо для масштаба.">
+        <div id="scene-empty" class="empty"><strong>Движение в 3D</strong><span>Появится после загрузки трекинга</span></div>
+        <div class="scene-hint">Мышь — вращение · колесо — масштаб · сетка 0,1 м</div>
+      </div>
+      <div class="panel-foot"><div class="button-group" aria-label="Ракурс">
+        <button data-view="perspective">Общий</button><button data-view="front">Спереди</button><button data-view="side">Сбоку</button><button data-view="top">Сверху</button>
+        </div><label><input id="trails" type="checkbox" checked> Следы · 2 с</label></div>
+    </article>
+  </section>
+
+  <section class="transport" aria-label="Воспроизведение">
+    <div class="transport-top"><div class="transport-buttons">
+      <button id="play" class="primary" disabled>▶ Воспроизвести</button>
+      <button id="prev" disabled aria-label="Предыдущий кадр">← Кадр</button><button id="next" disabled aria-label="Следующий кадр">Кадр →</button>
+      <label>Скорость <select id="speed"><option value="0.25">0,25×</option><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label></div>
+      <div class="clock"><strong id="clock">00:00.000</strong><span> / </span><span id="total">00:00.000</span></div>
+    </div>
+    <input id="timeline" type="range" min="0" max="1" step="0.001" value="0" disabled aria-label="Время трекинга">
+    <div class="transport-bottom"><span id="frame-info">Кадр —</span><div id="live-status"><span>Левая: —</span><span>Правая: —</span></div></div>
+  </section>
+
+  <section class="panel chart-panel">
+    <div class="panel-head"><h2>Положение по вертикали · Y, м</h2><span>Нажмите на график, чтобы перейти к моменту</span></div>
+    <canvas id="chart" height="150" role="img" aria-label="График координаты Y головы и запястий по времени. Цвета соответствуют легенде 3D-сцены."></canvas>
+  </section>
+
+  <section class="panel table-panel">
+    <div class="panel-head"><div><h2>Данные по секундам</h2><p>Ближайший кадр к началу секунды. Положение кисти — запястье. Координаты в метрах.</p></div>
+      <div class="table-actions"><label><input id="follow" type="checkbox" checked> Следовать за временем</label><button id="export" disabled>Экспорт CSV</button></div></div>
+    <div class="table-scroll"><table><thead><tr><th>Секунда / кадр</th><th>Голова<br><small>X · Y · Z</small></th><th>Левое запястье<br><small>X · Y · Z</small></th><th>Левая</th><th>Правое запястье<br><small>X · Y · Z</small></th><th>Правая</th><th>Неактивные кадры<br><small>Л / П за секунду</small></th></tr></thead><tbody id="rows"><tr><td colspan="7" class="table-empty">Загрузите файл, чтобы увидеть значения</td></tr></tbody></table></div>
+    <div class="panel-foot pagination"><button id="page-prev" disabled>← Назад</button><span id="page-info">—</span><button id="page-next" disabled>Вперёд →</button></div>
+  </section>
+
+  <details id="details" class="panel details"><summary>Подробности текущего кадра · повороты, суставы и исходные поля</summary>
+    <div class="details-content"><p id="detail-meta"></p><div id="head-detail"></div><div class="table-scroll"><table><thead><tr><th>Сустав</th><th>Левая · X / Y / Z, м</th><th>Флаг s</th><th>Правая · X / Y / Z, м</th><th>Флаг s</th></tr></thead><tbody id="joint-rows"></tbody></table></div>
+      <button id="raw-button">Прочитать исходный кадр</button><pre id="raw" hidden></pre>
+    </div>
+  </details>
+  <details class="panel details"><summary>Как читать данные и ограничения первой версии</summary><div class="details-content">
+    <p>Зелёный индикатор: isActive = 1. Красный: isActive = 0. Серый: поле отсутствует. Это признак активности; валидность координат проверяется отдельно по флагу PositionValid. Невалидные точки скрываются, в таблице — прочерк.</p>
+    <p>Координаты показаны в исходной системе записи: X вправо, Y вверх. Сетка — ориентир, а не измеренный пол. Направление шлема не является направлением взгляда глаз. Значения не сглаживаются; воспроизведение выбирает ближайший исходный кадр.</p>
+    <p>Время видео = время трекинга + сдвиг. Начальная привязка использует метку первого изображения, если она есть. Проверьте совпадение по заметному движению; сдвиг можно уточнить вручную. За пределами видео трекинг продолжает работать самостоятельно.</p>
+    <p>В первой версии отображаются голова и кисти. Body и параметры камер доступны в исходных данных, но не используются для анимации или наложения на видео.</p>
+    <p id="diagnostics">Диагностика появится после загрузки.</p><pre id="metadata"></pre>
+  </div></details>
+  <footer>Tracking Viewer · XRoboToolkit · файлы обрабатываются в вашем браузере</footer>
+</main>
+</body>
+</html>

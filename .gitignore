@@ -1,0 +1,6 @@
+node_modules/
+*.mp4
+*.webm
+trackingData_*.txt
+*.log
+.DS_Store
